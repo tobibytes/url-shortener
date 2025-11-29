@@ -1,16 +1,15 @@
 services:
-    backend:
-      container_name: url-shortener
-      build: .
-      env_file:
-        - ./.env
-      ports:
-        - "8000:8000"
-      networks:
-        - default
+  backend:
+    container_name: url-shortener
+    build: .
+    env_file:
+      - ./.env
+    ports:
+      - "8000:8000"
+    networks:
+      - default
 
-   
 networks:
   default:
-      name: app-network
-      driver: bridge
+    name: app-network
+    driver: bridge

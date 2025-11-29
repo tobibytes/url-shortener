@@ -1,7 +1,7 @@
+use crate::secrets::SECRET_MANAGER;
+use native_tls::TlsConnector;
 use tokio::sync::OnceCell;
 use tokio_postgres::Client;
-use native_tls::TlsConnector;
-use crate::secrets::SECRET_MANAGER;
 
 pub static DB_CLIENT: OnceCell<Client> = OnceCell::const_new();
 pub struct DbService;
@@ -31,7 +31,11 @@ impl DbService {
             .await
     }
 
-    pub async fn add_url(&self, code: &str, url: &str) -> Result<(String, String), tokio_postgres::Error> {
+    pub async fn add_url(
+        &self,
+        code: &str,
+        url: &str,
+    ) -> Result<(String, String), tokio_postgres::Error> {
         let client = self.client().await;
         let row = client
             .query_one(
@@ -42,7 +46,10 @@ impl DbService {
         Ok((row.get("code"), row.get("url")))
     }
 
-    pub async fn get_url_from_code(&self, code: &str) -> Result<(String, String), tokio_postgres::Error> {
+    pub async fn get_url_from_code(
+        &self,
+        code: &str,
+    ) -> Result<(String, String), tokio_postgres::Error> {
         let client = self.client().await;
         let row = client
             .query_one("SELECT url FROM url_table WHERE code = $1", &[&code])
@@ -56,5 +63,13 @@ impl DbService {
             .query_one("SELECT code FROM url_table WHERE url = $1", &[&url])
             .await?;
         Ok((row.get("code"), url.to_string()))
+    }
+
+    pub async fn check_db_health(&self) -> bool {
+        let client = self.client().await;
+        match client.check_connection().await {
+            Ok(_) => return true,
+            Err(_) => return false,
+        };
     }
 }
