@@ -1,41 +1,60 @@
-use std::sync::Mutex;
-use postgres::Client;
-use once_cell::sync::Lazy;
+use tokio::sync::OnceCell;
+use tokio_postgres::Client;
 use native_tls::TlsConnector;
 use crate::secrets::SECRET_MANAGER;
 
-pub static DBSERVICE: Lazy<Mutex<DbService>> = Lazy::new(|| {
-    Mutex::new(DbService::new().expect("failed to initialize database client"))
-});
-pub struct DbService { client: Client }
+pub static DB_CLIENT: OnceCell<Client> = OnceCell::const_new();
+pub struct DbService;
+pub static DBSERVICE: DbService = DbService;
+
 impl DbService {
-    pub fn new() -> Result<Self, postgres::Error> {
-        let connector =  TlsConnector::builder().build().unwrap();
-        let tls = postgres_native_tls::MakeTlsConnector::new(connector);
-        let connection_string = SECRET_MANAGER.get("DB_CONNECTION_STRING");
-        let client = Client::connect(connection_string.as_str(), tls)?;
-        Ok(DbService { client })
+    async fn client(&self) -> &'static Client {
+        DB_CLIENT
+            .get_or_init(|| async {
+                let connector = TlsConnector::builder()
+                    .build()
+                    .expect("failed to build TLS connector");
+                let tls = postgres_native_tls::MakeTlsConnector::new(connector);
+                let connection_string = SECRET_MANAGER.get("DB_CONNECTION_STRING");
+                let (client, connection) = tokio_postgres::connect(connection_string.as_str(), tls)
+                    .await
+                    .expect("failed to connect to database");
+
+                tokio::spawn(async move {
+                    if let Err(err) = connection.await {
+                        eprintln!("database connection error: {err}");
+                    }
+                });
+
+                client
+            })
+            .await
     }
 
-    pub fn add_url(&mut self, code: String, url: String) -> Result<(String, String), postgres::Error> {
-        let res = self.client.query_one("INSERT INTO url_table (code, url) VALUES ($1, $2) RETURNING code, url", &[&code, &url]);
-        match res {
-            Ok(row) => Ok((row.get("code"), row.get("url"))),
-            Err(err) => Err(err),
-        }
+    pub async fn add_url(&self, code: &str, url: &str) -> Result<(String, String), tokio_postgres::Error> {
+        let client = self.client().await;
+        let row = client
+            .query_one(
+                "INSERT INTO url_table (code, url) VALUES ($1, $2) RETURNING code, url",
+                &[&code, &url],
+            )
+            .await?;
+        Ok((row.get("code"), row.get("url")))
     }
-    pub fn get_url_from_code(&mut self, code: String) -> Result<(String, String), postgres::Error> {
-        let row_res = self.client.query_one("SELECT url FROM url_table WHERE code = $1", &[&code]);
-        match row_res {
-            Ok(row) => Ok((code, row.get("url"))),
-            Err(err) => Err(err),
-        }
+
+    pub async fn get_url_from_code(&self, code: &str) -> Result<(String, String), tokio_postgres::Error> {
+        let client = self.client().await;
+        let row = client
+            .query_one("SELECT url FROM url_table WHERE code = $1", &[&code])
+            .await?;
+        Ok((code.to_string(), row.get("url")))
     }
-    pub fn get_url(&mut self, url: String) -> Result<(String, String), postgres::Error> {
-        let row_res = self.client.query_one("SELECT code FROM url_table WHERE url = $1", &[&url]);
-        match row_res {
-            Ok(row) => Ok((row.get("code"), url)),
-            Err(err) => Err(err),
-        }
+
+    pub async fn get_url(&self, url: &str) -> Result<(String, String), tokio_postgres::Error> {
+        let client = self.client().await;
+        let row = client
+            .query_one("SELECT code FROM url_table WHERE url = $1", &[&url])
+            .await?;
+        Ok((row.get("code"), url.to_string()))
     }
 }
