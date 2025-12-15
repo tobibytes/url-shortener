@@ -72,4 +72,18 @@ impl DbService {
             Err(_) => return false,
         };
     }
+
+    pub async fn create_table_if_not_exists(&self) -> Result<(), tokio_postgres::Error> {
+        let client = self.client().await;
+        client
+            .execute(
+                "CREATE TABLE IF NOT EXISTS url_table (
+                    code VARCHAR(255) PRIMARY KEY,
+                    url TEXT NOT NULL
+                )",
+                &[],
+            )
+            .await?;
+        Ok(())
+    }
 }

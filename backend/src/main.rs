@@ -20,6 +20,13 @@ use controllers::UrlController;
 use crate::secrets::SECRET_MANAGER;
 #[tokio::main]
 async fn main() {
+    // Initialize database table if it doesn't exist
+    DBSERVICE
+        .create_table_if_not_exists()
+        .await
+        .expect("Failed to create table");
+    println!("Database table initialized successfully");
+
     let port = SECRET_MANAGER.get("PORT");
     let frontend_url = SECRET_MANAGER.get("FRONTEND_URL");
     let allowed_origin: HeaderValue = frontend_url.parse().expect("Invalid FRONTEND_URL for CORS");
