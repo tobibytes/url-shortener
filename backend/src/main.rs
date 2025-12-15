@@ -24,7 +24,7 @@ async fn main() {
     DBSERVICE
         .create_table_if_not_exists()
         .await
-        .expect("Failed to create table");
+        .expect("Failed to initialize database table on startup");
     println!("Database table initialized successfully");
 
     let port = SECRET_MANAGER.get("PORT");
