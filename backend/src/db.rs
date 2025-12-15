@@ -36,6 +36,7 @@ impl DbService {
         code: &str,
         url: &str,
     ) -> Result<(String, String), tokio_postgres::Error> {
+        let _ = self.create_table().await;
         let client = self.client().await;
         let row = client
             .query_one(
@@ -46,10 +47,24 @@ impl DbService {
         Ok((row.get("code"), row.get("url")))
     }
 
+    async fn create_table(&self) -> Result<(), tokio_postgres::Error> {
+        let client = self.client().await;
+        let _ = client
+            .execute(
+                "CREATE TABLE IF NOT EXISTS url_table (
+                code TEXT PRIMARY KEY UNIQUE,
+                url TEXT UNIQUE
+                );"
+            ,&[])
+            .await?;
+        Ok(())
+    }
+
     pub async fn get_url_from_code(
         &self,
         code: &str,
     ) -> Result<(String, String), tokio_postgres::Error> {
+        let _ = self.create_table().await;
         let client = self.client().await;
         let row = client
             .query_one("SELECT url FROM url_table WHERE code = $1", &[&code])
@@ -66,10 +81,11 @@ impl DbService {
     }
 
     pub async fn check_db_health(&self) -> bool {
+        let _ = self.create_table().await;
         let client = self.client().await;
         match client.check_connection().await {
-            Ok(_) => return true,
-            Err(_) => return false,
-        };
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 }
